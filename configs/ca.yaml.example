@@ -1,0 +1,23 @@
+# consensus-agent configuration
+# Copy to ~/.config/ca/ca.yaml and customise.
+
+consensus:
+  # Minimum confidence score for output to be accepted without debate.
+  threshold: 0.85
+  # Maximum debate rounds before triggering Human-in-the-Loop escalation.
+  max_rounds: 3
+
+cost:
+  # Total token budget per session across all model calls.
+  token_budget: 10000
+
+# Phase 1: add real LLM integrations here.
+models: []
+# Example:
+# models:
+#   - name: gemini-2.5-pro
+#     provider: google
+#     api_key: "YOUR_KEY"
+#   - name: claude-opus-4
+#     provider: anthropic
+#     api_key: "YOUR_KEY"
