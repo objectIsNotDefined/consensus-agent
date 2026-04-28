@@ -74,16 +74,16 @@ To prevent corrupting the user's repo during "Debate":
 
 | ID | Task | Key Points |
 |:---|:---|:---|
-| **1.1** | **LLM Provider Layer** | Implement `pkg/llm` with support for OpenAI and Anthropic. Add the `Selector` logic to match `CapabilityProfile` to config. |
-| **1.2** | **SQLite Blackboard** | Implement `internal/blackboard/sqlite.go`. Define schema for `messages`, `tasks`, and `artifacts`. |
-| **1.3** | **DAG Executor** | Create a basic engine in `internal/dag` that can run tasks in parallel based on dependencies. |
-| **1.4** | **Navigator Real Scan** | Replace Navigator mock with real logic that traverses the filesystem and builds a "Map" for the LLM context. |
-| **1.5** | **Consensus Evaluator** | Implement the first version of the scoring algorithm in `internal/consensus`. |
-| **1.6** | **SAST Integration** | Hook up `golangci-lint` and `gosec` inside the `Validator` role. |
-| **1.7** | **Sandbox & Diff** | Implement the `internal/workspace` logic to copy files to a temporary area and generate `git diff` output. |
-| **1.8** | **Human-in-the-Loop** | Add a TUI state that pauses execution and prompts the user for "Approve / Reject / Comment" when consensus fails. |
-| **1.9** | **Circuit Breaker** | Implement `internal/breaker` to track API failures and switch models if one provider is down. |
-| **1.10** | **Visual Config Portal** | Create a simple HTML/Web-based UI (or interactive TUI wizard) to manage `ca.yaml`, API keys, and model capability overrides. |
+| **1.1** | **Visual Config Portal** | Create a simple HTML/Web-based UI to manage `ca.yaml`, API keys, and model capability overrides. |
+| **1.2** | **LLM Provider Layer** | Implement `pkg/llm` with support for OpenAI and Anthropic. Add the `Selector` logic to match `CapabilityProfile` to config. |
+| **1.3** | **SQLite Blackboard** | Implement `internal/blackboard/sqlite.go`. Define schema for `messages`, `tasks`, and `artifacts`. |
+| **1.4** | **DAG Executor** | Create a basic engine in `internal/dag` that can run tasks in parallel based on dependencies. |
+| **1.5** | **Navigator Real Scan** | Replace Navigator mock with real logic that traverses the filesystem and builds a "Map" for the LLM context. |
+| **1.6** | **Consensus Evaluator** | Implement the first version of the scoring algorithm in `internal/consensus`. |
+| **1.7** | **SAST Integration** | Hook up `golangci-lint` and `gosec` inside the `Validator` role. |
+| **1.8** | **Sandbox & Diff** | Implement the `internal/workspace` logic to copy files to a temporary area and generate `git diff` output. |
+| **1.9** | **Human-in-the-Loop** | Add a TUI state that pauses execution and prompts the user for "Approve / Reject / Comment" when consensus fails. |
+| **1.10** | **Circuit Breaker** | Implement `internal/breaker` to track API failures and switch models if one provider is down. |
 
 ---
 
