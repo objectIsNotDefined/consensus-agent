@@ -12,20 +12,26 @@ import (
 const appVersion = "v0.1.0"
 
 // renderHeader renders the top bar showing app identity and current context.
-func renderHeader(width int, workspace string, elapsed time.Duration, inputMode bool) string {
+func renderHeader(width int, workspace string, elapsed time.Duration, turns int, inputMode bool) string {
 	left := styles.AppName.Render("⚡ consensus-agent") + "  " +
 		styles.Dim.Render(appVersion)
 
 	var right string
-	if inputMode {
+	if inputMode && turns == 0 {
 		right = styles.Muted.Render("Enter your task below")
 	} else {
+		// Show turn indicator if > 0
+		turnInfo := ""
+		if turns > 0 {
+			turnInfo = styles.DoneStyle.Render(fmt.Sprintf(" Round %d ", turns+1)) + "  "
+		}
+
 		// Show workspace basename (or full path if short)
 		label := workspace
 		if len(label) > 35 {
 			label = "…/" + filepath.Base(workspace)
 		}
-		right = styles.Dim.Render("📁 "+label) + "  " +
+		right = turnInfo + styles.Dim.Render("📁 "+label) + "  " +
 			styles.Muted.Render("⏱ "+formatDuration(elapsed))
 	}
 

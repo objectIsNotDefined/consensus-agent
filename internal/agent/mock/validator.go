@@ -11,11 +11,11 @@ import (
 // LLM-based semantic code review combined with SAST toolchain (golangci-lint, gosec).
 type Validator struct {
 	base
-	bb *blackboard.Blackboard
+	bb blackboard.Blackboard
 }
 
 // NewValidator returns a mock Validator agent.
-func NewValidator(bb *blackboard.Blackboard) agent.Agent {
+func NewValidator(bb blackboard.Blackboard) agent.Agent {
 	plans := []logPlan{
 		{400 * time.Millisecond, "INFO", "Awaiting code output from Executor..."},
 		{600 * time.Millisecond, "INFO", "Code received — starting dual-track validation"},

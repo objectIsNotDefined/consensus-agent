@@ -11,11 +11,11 @@ import (
 // subtasks, orchestrating Executor and Validator, and driving the consensus loop.
 type Architect struct {
 	base
-	bb *blackboard.Blackboard
+	bb blackboard.Blackboard
 }
 
 // NewArchitect returns a mock Architect agent.
-func NewArchitect(bb *blackboard.Blackboard) agent.Agent {
+func NewArchitect(bb blackboard.Blackboard) agent.Agent {
 	plans := []logPlan{
 		{300 * time.Millisecond, "INFO", "Reading task description from Blackboard"},
 		{600 * time.Millisecond, "INFO", "Loading codebase context from Navigator index"},

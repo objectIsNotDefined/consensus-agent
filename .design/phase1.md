@@ -24,7 +24,12 @@ type CapabilityProfile struct {
 
 ### Persistent Blackboard (`internal/blackboard`)
 Upgrade from `sync.Map` to **SQLite**. 
-- **Why:** Enables session recovery, auditing, and complex queries (e.g., "find all rejected code snippets").
+- **Why:** Enables session recovery, auditing, and **multi-turn dialogue context**.
+- **Schema:**
+    - `sessions`: Tracks workspace and overall conversation state.
+    - `turns`: Records each user prompt and the final system response.
+    - `tasks`: Links specific agent actions to a particular turn.
+    - `artifacts`: Versioned code snippets and diffs.
 - **Pub/Sub:** Agents subscribe to specific "keys" or "topics" on the blackboard to react to state changes.
 
 ---
@@ -76,7 +81,7 @@ To prevent corrupting the user's repo during "Debate":
 |:---|:---|:---|
 | **1.1** | **Visual Config Portal** | Create a simple HTML/Web-based UI to manage `ca.yaml`, API keys, and model capability overrides. |
 | **1.2** | **LLM Provider Layer** | Implement `pkg/llm` with support for OpenAI and Anthropic. Add the `Selector` logic to match `CapabilityProfile` to config. |
-| **1.3** | **SQLite Blackboard** | Implement `internal/blackboard/sqlite.go`. Define schema for `messages`, `tasks`, and `artifacts`. |
+| **1.3** | **SQLite Blackboard** | Implement `internal/blackboard/sqlite.go`. Define schema for `sessions`, `turns`, `tasks`, and `artifacts` to support multi-turn memory. |
 | **1.4** | **DAG Executor** | Create a basic engine in `internal/dag` that can run tasks in parallel based on dependencies. |
 | **1.5** | **Navigator Real Scan** | Replace Navigator mock with real logic that traverses the filesystem and builds a "Map" for the LLM context. |
 | **1.6** | **Consensus Evaluator** | Implement the first version of the scoring algorithm in `internal/consensus`. |

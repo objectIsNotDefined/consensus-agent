@@ -38,7 +38,12 @@ Prompt> $ ca ./my-project
            ▼
   All agents complete → "Consensus Reached ✅" banner
            │
-  [Q / Ctrl+C] → TUI exits, terminal restored
+  ┌────────────────────────────────────────────────────┐
+  │   [Enter] Next turn (e.g. "Add logging to it")     │──┐
+  │   [R] Reset all     [Q] Quit                       │  │
+  └────────────────────────────────────────────────────┘  │
+           ▲                                              │
+           └──────────────────────────────────────────────┘
 ```
 
 ---

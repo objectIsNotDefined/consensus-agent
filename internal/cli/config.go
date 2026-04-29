@@ -53,7 +53,7 @@ func startGUIPortal() {
 	addr := fmt.Sprintf("localhost:%d", port)
 	fmt.Printf("Starting Visual Config Portal at http://%s\n", addr)
 	fmt.Println("Press Ctrl+C to stop.")
-	
+
 	http.HandleFunc("/", serveHTML)
 	http.HandleFunc("/api/config", handleConfigAPI)
 
@@ -186,16 +186,27 @@ const htmlTemplate = `
                         <button @click="removeModel(index)" class="absolute top-2 right-2 text-slate-500 hover:text-red-400">✕</button>
                         <div class="grid grid-cols-4 gap-4 mb-4">
                             <div>
-                                <label class="block text-xs text-slate-500 mb-1">Name</label>
-                                <input v-model="model.name" placeholder="e.g. gpt-4o" class="w-full px-3 py-2 rounded text-sm">
-                            </div>
-                            <div>
                                 <label class="block text-xs text-slate-500 mb-1">Provider</label>
-                                <select v-model="model.provider" @change="updateDefaultEndpoint(index)" class="w-full px-3 py-2 rounded text-sm bg-slate-900 border border-slate-700">
+                                <select v-model="model.provider" @change="onProviderChange(index)" class="w-full px-3 py-2 rounded text-sm bg-slate-900 border border-slate-700">
                                     <option value="openai">OpenAI</option>
                                     <option value="anthropic">Anthropic</option>
                                     <option value="google">Google Gemini</option>
+                                    <option value="deepseek">Deepseek</option>
                                 </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-500 mb-1">Model Name</label>
+                                <div class="relative">
+                                    <select v-model="model.name" class="w-full px-3 py-2 rounded text-sm bg-slate-900 border border-slate-700">
+                                        <option v-for="m in getAvailableModels(model.provider)" :key="m" :value="m">{{ m }}</option>
+                                        <option value="custom">-- Custom --</option>
+                                    </select>
+                                    <input v-if="model.name === 'custom' || !getAvailableModels(model.provider).includes(model.name)" 
+                                           v-model="model.customName" 
+                                           @input="model.name = model.customName"
+                                           placeholder="Enter model ID" 
+                                           class="absolute inset-0 w-full px-3 py-2 rounded text-sm bg-slate-900 border border-sky-500">
+                                </div>
                             </div>
                             <div>
                                 <label class="block text-xs text-slate-500 mb-1">Endpoint URL</label>
@@ -234,7 +245,15 @@ const htmlTemplate = `
         const DEFAULT_ENDPOINTS = {
             openai: 'https://api.openai.com/v1',
             anthropic: 'https://api.anthropic.com',
-            google: 'https://generativelanguage.googleapis.com'
+            google: 'https://generativelanguage.googleapis.com',
+            deepseek: 'https://api.deepseek.com'
+        }
+
+        const MODEL_LIST = {
+            openai: ['gpt-4o', 'gpt-4o-mini', 'o1-preview', 'o1-mini'],
+            anthropic: ['claude-3-5-sonnet-20240620', 'claude-3-opus-20240229', 'claude-3-haiku-20240307'],
+            google: ['gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+            deepseek: ['deepseek-v4-flash', 'deepseek-v4-pro']
         }
 
         createApp({
@@ -255,6 +274,12 @@ const htmlTemplate = `
                         if (!res.ok) throw new Error('Failed to fetch config')
                         this.cfg = await res.json()
                         if (!this.cfg.models) this.cfg.models = []
+                        // Initialize customName for each model
+                        this.cfg.models.forEach(m => {
+                            if (!MODEL_LIST[m.provider]?.includes(m.name)) {
+                                m.customName = m.name
+                            }
+                        })
                     } catch (err) {
                         console.error(err)
                         alert('Error loading configuration. Please check backend logs.')
@@ -273,22 +298,31 @@ const htmlTemplate = `
                     }
                 },
                 addModel() {
+                    const provider = 'openai'
                     this.cfg.models.push({ 
-                        name: '', 
-                        provider: 'openai', 
-                        endpoint_url: DEFAULT_ENDPOINTS.openai, 
+                        name: MODEL_LIST[provider][0], 
+                        provider: provider, 
+                        endpoint_url: DEFAULT_ENDPOINTS[provider], 
                         api_key: '',
-                        roles: ['Navigator', 'Architect', 'Executor', 'Validator']
+                        roles: ['Navigator', 'Architect', 'Executor', 'Validator'],
+                        customName: ''
                     })
                 },
                 removeModel(index) {
                     this.cfg.models.splice(index, 1)
                 },
-                updateDefaultEndpoint(index) {
+                onProviderChange(index) {
                     const model = this.cfg.models[index]
                     if (DEFAULT_ENDPOINTS[model.provider]) {
                         model.endpoint_url = DEFAULT_ENDPOINTS[model.provider]
                     }
+                    if (MODEL_LIST[model.provider]) {
+                        model.name = MODEL_LIST[model.provider][0]
+                    }
+                    model.customName = ''
+                },
+                getAvailableModels(provider) {
+                    return MODEL_LIST[provider] || []
                 }
             }
         }).mount('#app')

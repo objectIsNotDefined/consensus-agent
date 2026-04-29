@@ -11,11 +11,11 @@ import (
 // assigned by the Architect inside an isolated virtual workspace sandbox.
 type Executor struct {
 	base
-	bb *blackboard.Blackboard
+	bb blackboard.Blackboard
 }
 
 // NewExecutor returns a mock Executor agent.
-func NewExecutor(bb *blackboard.Blackboard) agent.Agent {
+func NewExecutor(bb blackboard.Blackboard) agent.Agent {
 	plans := []logPlan{
 		{400 * time.Millisecond, "INFO", "Awaiting subtask assignment from Architect..."},
 		{600 * time.Millisecond, "INFO", "SubTask [A] received: Define interface contract"},

@@ -28,6 +28,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/objectisnotdefined/consensus-agent/ca/internal/agent"
+	"github.com/objectisnotdefined/consensus-agent/ca/internal/blackboard"
 	"github.com/objectisnotdefined/consensus-agent/ca/internal/tui/styles"
 	"github.com/objectisnotdefined/consensus-agent/ca/pkg/config"
 )
@@ -50,13 +51,16 @@ type Model struct {
 	registry  *agent.Registry
 	workspace string
 	cfg       *config.Config
+	bb        blackboard.Blackboard
+	sessionID string
 
 	// ── Terminal dimensions
 	width  int
 	height int
 
 	// ── Application state
-	inputMode bool // true → task input screen; false → agent monitoring screen
+	inputMode bool // true → initial task input screen
+	followUpMode bool // true → show input box at the bottom of the dashboard
 	allDone   bool // true when every agent reports Done or Failed
 
 	// ── Task input
@@ -79,6 +83,7 @@ type Model struct {
 	elapsed        time.Duration
 	tokenUsed      int
 	consensusScore float64
+	turns          int
 
 	// ── Context (for future agent cancellation)
 	ctx    context.Context
@@ -86,7 +91,7 @@ type Model struct {
 }
 
 // New creates the root model. Call tea.NewProgram(model, tea.WithAltScreen()) to run.
-func New(registry *agent.Registry, workspace string, cfg *config.Config) *Model {
+func New(registry *agent.Registry, workspace string, cfg *config.Config, bb blackboard.Blackboard, sessionID string) *Model {
 	ti := textinput.New()
 	ti.Placeholder = "e.g. Add JWT auth middleware to the HTTP router"
 	ti.Focus()
@@ -105,6 +110,8 @@ func New(registry *agent.Registry, workspace string, cfg *config.Config) *Model 
 		registry:   registry,
 		workspace:  workspace,
 		cfg:        cfg,
+		bb:         bb,
+		sessionID:  sessionID,
 		inputMode:  true,
 		input:      ti,
 		statuses:   statuses,
@@ -174,7 +181,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Delegate to child models
-	if m.inputMode {
+	if m.inputMode || m.followUpMode {
 		var cmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
 		cmds = append(cmds, cmd)
@@ -221,6 +228,7 @@ func (m *Model) handleInputKey(msg tea.KeyMsg) []tea.Cmd {
 		m.startTime = time.Now()
 		m.rebuildViewport()
 		// Fire all agents in parallel
+		_, _ = m.bb.CreateTurn(m.sessionID, task, m.turns)
 		return m.registry.StartAll(m.ctx, task, m.workspace)
 
 	case tea.KeyCtrlC, tea.KeyEsc:
@@ -231,6 +239,38 @@ func (m *Model) handleInputKey(msg tea.KeyMsg) []tea.Cmd {
 }
 
 func (m *Model) handleRunKey(msg tea.KeyMsg) []tea.Cmd {
+	if m.followUpMode {
+		switch msg.Type {
+		case tea.KeyEnter:
+			task := strings.TrimSpace(m.input.Value())
+			if task == "" {
+				return nil
+			}
+			m.followUpMode = false
+			m.turns++
+			m.allDone = false
+			m.consensusScore = 0
+			m.elapsed = 0
+			m.startTime = time.Now()
+			for _, r := range agent.AllRoles {
+				m.statuses[r] = agent.StatusIdle
+				m.logs[r] = nil
+			}
+			m.registry.ResetAll()
+			m.input.Blur()
+			m.rebuildViewport()
+			_, _ = m.bb.CreateTurn(m.sessionID, task, m.turns)
+			return m.registry.StartAll(m.ctx, task, m.workspace)
+		case tea.KeyEsc:
+			m.followUpMode = false
+			m.input.Blur()
+			return nil
+		}
+		// In follow-up mode, we only handle Enter and Esc. 
+		// Other keys are passed to the textinput component in the main Update loop.
+		return nil
+	}
+
 	switch msg.String() {
 	case "q", "Q", "ctrl+c":
 		m.cancel()
@@ -240,6 +280,14 @@ func (m *Model) handleRunKey(msg tea.KeyMsg) []tea.Cmd {
 		m.syncViewport()
 	case "r", "R":
 		m.resetSession()
+	case "enter":
+		if m.allDone {
+			m.followUpMode = true
+			m.input.Reset()
+			m.input.Placeholder = fmt.Sprintf("Turn %d: What's next?", m.turns+2)
+			m.input.Focus()
+			return []tea.Cmd{textinput.Blink}
+		}
 	}
 	return nil
 }
@@ -302,8 +350,10 @@ func (m *Model) recalcConsensus() {
 	m.consensusScore = float64(done) / float64(len(agent.AllRoles)) * 0.91
 }
 
+// recalcConsensus updates the simulated consensus score based on done count.
 // resetSession resets the TUI and all agents for a new task.
 func (m *Model) resetSession() {
+	m.turns = 0
 	m.registry.ResetAll()
 	m.inputMode = true
 	m.allDone = false
@@ -324,7 +374,7 @@ func (m *Model) resetSession() {
 
 // renderInputScreen renders the centered task-input screen.
 func (m *Model) renderInputScreen() string {
-	header := renderHeader(m.width, m.workspace, 0, true)
+	header := renderHeader(m.width, m.workspace, 0, m.turns, true)
 	footer := renderFooter(m.width, true)
 	bodyH := m.height - 2 // remove header and footer lines
 
@@ -367,11 +417,18 @@ func (m *Model) renderRunScreen() string {
 		logCounts[r] = len(m.logs[r])
 	}
 
-	header := renderHeader(m.width, m.workspace, m.elapsed, false)
+	header := renderHeader(m.width, m.workspace, m.elapsed, m.turns, false)
 
-	// Footer: replace with consensus banner when all done
+	// Footer logic
 	var footer string
-	if m.allDone {
+	if m.followUpMode {
+		prompt := styles.InputPrompt.Render(fmt.Sprintf(" Turn %d > ", m.turns+2))
+		footer = lipgloss.NewStyle().
+			Width(m.width).
+			Background(lipgloss.Color(styles.ColBgDark)).
+			Padding(0, 1).
+			Render(lipgloss.JoinHorizontal(lipgloss.Center, prompt, m.input.View()))
+	} else if m.allDone {
 		footer = renderConsensusBanner(m.width, m.consensusScore, m.elapsed)
 	} else {
 		footer = renderFooter(m.width, false)
@@ -410,7 +467,7 @@ func renderConsensusBanner(width int, score float64, elapsed time.Duration) stri
 			"  ·  Score: "+lipgloss.NewStyle().Foreground(lipgloss.Color(styles.ColSuccess)).
 				Render(formatScore(score))+
 				"  ·  Time: "+formatDuration(elapsed)+
-				"  ·  [R] New task  [Q] Quit",
+				"  ·  [Enter] Next turn  [R] Reset  [Q] Quit",
 		)
 	return lipgloss.NewStyle().
 		Width(width).

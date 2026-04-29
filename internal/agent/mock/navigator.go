@@ -11,11 +11,11 @@ import (
 // semantic code index, and publishing a codebase snapshot to the Blackboard.
 type Navigator struct {
 	base
-	bb *blackboard.Blackboard
+	bb blackboard.Blackboard
 }
 
 // NewNavigator returns a mock Navigator agent.
-func NewNavigator(bb *blackboard.Blackboard) agent.Agent {
+func NewNavigator(bb blackboard.Blackboard) agent.Agent {
 	plans := []logPlan{
 		{350 * time.Millisecond, "INFO", "Initializing workspace scan..."},
 		{500 * time.Millisecond, "INFO", "Traversing directory tree recursively"},

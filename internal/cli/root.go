@@ -6,12 +6,15 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/google/uuid"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/objectisnotdefined/consensus-agent/ca/internal/agent"
 	"github.com/objectisnotdefined/consensus-agent/ca/internal/agent/mock"
+	"github.com/objectisnotdefined/consensus-agent/ca/internal/agent/roles"
 	"github.com/objectisnotdefined/consensus-agent/ca/internal/blackboard"
 	"github.com/objectisnotdefined/consensus-agent/ca/internal/tui"
 	"github.com/objectisnotdefined/consensus-agent/ca/pkg/config"
+	"github.com/objectisnotdefined/consensus-agent/ca/pkg/llm"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -43,16 +46,36 @@ Powered by MCDD — Model Consensus Driven Development.`,
 
 		// Build dependencies
 		cfg := config.Default()
-		bb := blackboard.New()
+		// Load actual config from viper (if file exists)
+		if err := viper.Unmarshal(&cfg); err != nil {
+			// fallback to default on error
+		}
+
+		home, _ := os.UserHomeDir()
+		dbPath := filepath.Join(home, ".config", "ca", "history.db")
+		bb, err := blackboard.NewSQLiteBlackboard(dbPath)
+		if err != nil {
+			return fmt.Errorf("failed to initialize blackboard: %w", err)
+		}
+		defer bb.Close()
+
+		sessionID := uuid.New().String()
+		if err := bb.NewSession(sessionID, abs); err != nil {
+			return fmt.Errorf("failed to create session: %w", err)
+		}
+
+		// Initialize LLM selector
+		selector := llm.NewSelector(cfg.Models)
+
 		registry := agent.NewRegistry([]agent.Agent{
-			mock.NewNavigator(bb),
+			roles.NewNavigator(bb, selector),
 			mock.NewArchitect(bb),
 			mock.NewExecutor(bb),
 			mock.NewValidator(bb),
 		})
 
 		// Launch TUI
-		model := tui.New(registry, abs, cfg)
+		model := tui.New(registry, abs, cfg, bb, sessionID)
 		p := tea.NewProgram(model,
 			tea.WithAltScreen(),
 			tea.WithMouseCellMotion(),

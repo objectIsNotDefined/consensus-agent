@@ -33,7 +33,7 @@ The project adopts a **1+N Role Matrix**. Instead of binding roles to specific m
 
 `Consensus-Agent` is not a simple API wrapper. It is a rigorous collaboration loop:
 
-- **State Awareness:** All roles share a common **Blackboard** — an in-memory or SQLite-backed shared state layer sitting above MCP. Model Context Protocol (MCP) is responsible solely for tool execution, keeping layers clean and preventing race conditions on the filesystem.
+- **State Awareness:** All roles share a common **Blackboard** — a persistent SQLite-backed shared state layer. This enables **multi-turn dialogue**, allowing users to refine code over several rounds while maintaining full context of previous changes.
 - **Parallel Sprints:** Once a task begins, the Executor writes code logic while the Validator simultaneously generates test stubs — achieving "develop-and-test in parallel."
 - **Logical Consensus:** Before any code is written to disk, the Architect cross-compares the Executor's output and the Validator's audit result. A **Confidence Score** is computed. Only code that meets the consensus threshold is merged.
 - **Consensus Failure Handling:** If the confidence score falls below the threshold after N rounds of debate, the system triggers a **Human-in-the-Loop** checkpoint, pausing for developer review.
