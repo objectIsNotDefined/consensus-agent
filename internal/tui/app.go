@@ -503,7 +503,7 @@ func (m *Model) renderRunScreen() string {
 	if m.viewportReady {
 		isRunning := m.statuses[m.activeRole] == agent.StatusRunning
 		right = renderDetail(m.viewport, rightW, panelH, m.activeRole,
-			logCounts[m.activeRole], isRunning, m.spinnerFrame)
+			logCounts[m.activeRole], isRunning, m.spinnerFrame, m.bb)
 	} else {
 		right = styles.PanelBorder.Width(rightW - 2).Height(panelH - 2).Render("")
 	}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 type openaiClient struct {
@@ -21,6 +22,11 @@ func NewOpenAIClient(name, provider, apiKey, endpoint string) LLMClient {
 	if endpoint == "" {
 		endpoint = "https://api.openai.com/v1"
 	}
+	// Deepseek and many providers need the /v1 suffix if not provided
+	if provider == "deepseek" && !strings.HasSuffix(endpoint, "/v1") && !strings.Contains(endpoint, "/v1/") {
+		endpoint = strings.TrimSuffix(endpoint, "/") + "/v1"
+	}
+
 	return &openaiClient{
 		name:     name,
 		provider: provider,

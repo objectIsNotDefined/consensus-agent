@@ -7,6 +7,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/objectisnotdefined/consensus-agent/ca/internal/agent"
+	"github.com/objectisnotdefined/consensus-agent/ca/internal/blackboard"
+	"github.com/objectisnotdefined/consensus-agent/ca/internal/consensus"
 	"github.com/objectisnotdefined/consensus-agent/ca/internal/tui/styles"
 )
 
@@ -45,8 +47,7 @@ func buildDetailContent(logs []agent.LogEntry) string {
 	return sb.String()
 }
 
-// renderDetail renders the right panel (70%) with a scrollable log viewport.
-// Width and height are total outer dimensions including the panel border.
+// renderDetail renders the right panel (70%) with a scrollable log viewport and optional summary.
 func renderDetail(
 	vp viewport.Model,
 	width, height int,
@@ -54,6 +55,7 @@ func renderDetail(
 	logCount int,
 	isRunning bool,
 	spinnerFrame int,
+	bb blackboard.Blackboard,
 ) string {
 	innerW := width - 4 // border(2) + padding(2)
 
@@ -75,14 +77,89 @@ func renderDetail(
 	// ── Divider ──────────────────────────────────────────
 	divider := styles.Dim.Render(strings.Repeat("─", innerW))
 
+	// ── Summary Section (Role Specific) ──────────────────
+	summary := renderRoleSummary(role, bb, innerW)
+
 	// ── Viewport body ────────────────────────────────────
+	// Adjust viewport height based on summary height
+	vpH := height - 6 // default (title + divider + border)
+	if summary != "" {
+		vpH -= lipgloss.Height(summary)
+	}
+	if vpH < 5 {
+		vpH = 5
+	}
+	vp.Height = vpH
 	body := vp.View()
 
-	content := titleBar + "\n" + divider + "\n" + body
+	var content string
+	if summary != "" {
+		content = titleBar + "\n" + divider + "\n" + summary + "\n" + body
+	} else {
+		content = titleBar + "\n" + divider + "\n" + body
+	}
 
 	return styles.PanelBorder.
 		Width(width - 2).
 		Height(height - 2).
 		Padding(0, 1).
 		Render(content)
+}
+
+func renderRoleSummary(role agent.Role, bb blackboard.Blackboard, width int) string {
+	switch role {
+	case agent.RoleValidator:
+		report, _ := bb.Get(consensus.KeyValidatorReport)
+		semantic, _ := bb.Get(consensus.KeySemanticAgreement)
+		sast, _ := bb.Get(consensus.KeySASTPassRate)
+
+		if report == nil {
+			return ""
+		}
+
+		scoreStr := fmt.Sprintf("Semantic: %.2f | SAST: %.2f", semantic, sast)
+		badge := styles.ScoreBadge.Render("VALIDATION REPORT")
+		scoreLine := styles.Bold.Foreground(lipgloss.Color(styles.ColSuccess)).Render(scoreStr)
+		
+		desc := styles.Text.Width(width - 4).Render(fmt.Sprintf("%v", report))
+
+		return styles.SummaryBox.Width(width).Render(
+			lipgloss.JoinVertical(lipgloss.Left,
+				lipgloss.JoinHorizontal(lipgloss.Center, badge, " ", scoreLine),
+				"",
+				desc,
+			),
+		)
+
+	case agent.RoleArchitect:
+		planSummary, _ := bb.Get(consensus.KeyArchitectPlanSummary)
+		if planSummary == nil {
+			return ""
+		}
+		badge := styles.ScoreBadge.Background(lipgloss.Color(styles.ColAccent)).Render("ARCHITECTURE PLAN")
+		desc := styles.Text.Width(width - 4).Render(fmt.Sprintf("%v", planSummary))
+		
+		return styles.SummaryBox.Width(width).Render(
+			lipgloss.JoinVertical(lipgloss.Left, badge, "", desc),
+		)
+
+	case agent.RoleNavigator:
+		summary, _ := bb.Get("codebase_summary")
+		if summary == nil {
+			return ""
+		}
+		badge := styles.ScoreBadge.Background(lipgloss.Color(styles.ColSky)).Render("CODEBASE INTELLIGENCE")
+		// Truncate navigator summary if too long for a summary box
+		summaryStr := fmt.Sprintf("%v", summary)
+		if len(summaryStr) > 200 {
+			summaryStr = summaryStr[:197] + "..."
+		}
+		desc := styles.Text.Width(width - 4).Render(summaryStr)
+
+		return styles.SummaryBox.Width(width).Render(
+			lipgloss.JoinVertical(lipgloss.Left, badge, "", desc),
+		)
+	}
+
+	return ""
 }

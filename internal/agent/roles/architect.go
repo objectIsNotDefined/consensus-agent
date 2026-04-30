@@ -81,10 +81,11 @@ func (a *Architect) Start(ctx context.Context, task string, workspace string) te
 		// 2. Select Model
 		client, err := a.selector.SelectByRole("Architect")
 		if err != nil {
-			a.log("WARN", "No specialized model for Architect, using fallback.")
-		} else {
-			a.log("INFO", fmt.Sprintf("Using model: %s (%s)", client.Name(), client.Provider()))
+			a.log("ERROR", fmt.Sprintf("No model found for Architect: %v", err))
+			a.emitStatus(agent.StatusFailed)
+			return
 		}
+		a.log("INFO", fmt.Sprintf("Using model: %s (%s)", client.Name(), client.Provider()))
 
 		// 3. Call LLM (In Phase 1, we simulate the streaming logs but capture the final result)
 		// TODO: Implement real streaming LLM call in pkg/llm to pipe into a.log

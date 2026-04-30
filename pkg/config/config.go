@@ -28,8 +28,8 @@ type CostConfig struct {
 type ModelConfig struct {
 	Name        string   `mapstructure:"name" json:"name"`
 	Provider    string   `mapstructure:"provider" json:"provider"`
-	APIKey      string   `mapstructure:"api_key" json:"api_key"`
-	EndpointURL string   `mapstructure:"endpoint_url" json:"endpoint_url"`
+	APIKey      string   `mapstructure:"apikey" json:"api_key"`
+	EndpointURL string   `mapstructure:"endpointurl" json:"endpoint_url"`
 	Roles       []string `mapstructure:"roles" json:"roles"`
 }
 

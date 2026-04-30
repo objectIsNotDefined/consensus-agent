@@ -88,4 +88,22 @@ var (
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColPrimary)).
 			Padding(0, 1)
+
+	// ── Agent-specific summary styles
+	SummaryBox = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(ColDim)).
+			Padding(0, 1).
+			MarginBottom(1)
+
+	ScoreBadge = lipgloss.NewStyle().
+			Bold(true).
+			Padding(0, 1).
+			Background(lipgloss.Color(ColPrimary)).
+			Foreground(lipgloss.Color(ColText))
+
+	ReportTitle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColAccent)).
+			Bold(true).
+			Underline(true)
 )

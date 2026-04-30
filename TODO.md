@@ -10,41 +10,41 @@
 > Goal: Build a working, robust, and well-defined multi-model consensus pipeline.
 
 ### Architecture & Design
-- [ ] Define `CapabilityProfile` struct for each role (context window size, reasoning tier, speed tier)
-- [ ] Implement dynamic model selector: load available models from config and match to role capability profiles at runtime
-- [ ] Design and implement the **Blackboard** shared state layer (in-memory KV with optional SQLite persistence)
-- [ ] Decouple agent communication from MCP tool execution via the Blackboard abstraction
+- [x] Define `CapabilityProfile` struct for each role (context window size, reasoning tier, speed tier)
+- [x] Implement dynamic model selector: load available models from config and match to role capability profiles at runtime
+- [x] Design and implement the **Blackboard** shared state layer (in-memory KV with optional SQLite persistence)
+- [x] Decouple agent communication from MCP tool execution via the Blackboard abstraction
 
 ### Consensus Engine
-- [ ] Define the **Confidence Score** algorithm (e.g., semantic similarity, AST diff agreement, test pass rate)
-- [ ] Implement consensus evaluation loop: Architect cross-compares Executor output and Validator audit
-- [ ] Set configurable `consensus_threshold` (default: 0.85)
-- [ ] Implement debate retry loop: re-run disagreeing agents up to `max_rounds` (default: 3)
-- [ ] Implement **Human-in-the-Loop** escalation: pause and prompt developer when consensus fails after max rounds
+- [x] Define the **Confidence Score** algorithm (e.g., semantic similarity, AST diff agreement, test pass rate)
+- [x] Implement consensus evaluation loop: Architect cross-compares Executor output and Validator audit
+- [x] Set configurable `consensus_threshold` (default: 0.85)
+- [x] Implement debate retry loop: re-run disagreeing agents up to `max_rounds` (default: 3)
+- [x] Implement **Human-in-the-Loop** escalation: pause and prompt developer when consensus fails after max rounds
 
 ### Resilience
 - [ ] Implement **Circuit Breaker** per model integration
   - [ ] Track error rate and P95 latency per model
   - [ ] Auto-disable model and fallback to next-best when thresholds are breached
   - [ ] Implement half-open state for recovery probing
-- [ ] Handle API-level failures gracefully: timeouts, rate limits, malformed outputs
+- [x] Handle API-level failures gracefully: timeouts, rate limits, malformed outputs
 
 ### Validator Revamp
-- [ ] Replace Copilot/Codex placeholder with LLM-powered semantic code review agent
-- [ ] Integrate `golangci-lint` as a mandatory validation step
-- [ ] Integrate `gosec` for security-focused static analysis
-- [ ] Combine LLM audit score + SAST pass/fail into a unified Validator report fed to the consensus engine
+- [x] Replace Copilot/Codex placeholder with LLM-powered semantic code review agent
+- [x] Integrate `golangci-lint` as a mandatory validation step
+- [x] Integrate `gosec` for security-focused static analysis
+- [x] Combine LLM audit score + SAST pass/fail into a unified Validator report fed to the consensus engine
 
 ### CLI / TUI
-- [ ] Scaffold the Bubble Tea TUI shell
-- [ ] Implement interactive task input and live agent status display
+- [x] Scaffold the Bubble Tea TUI shell
+- [x] Implement interactive task input and live agent status display
 - [ ] Add code diff preview before any file is written to disk
 - [ ] Implement automated PR/commit generation after consensus is reached
 
 ### Infrastructure
-- [ ] Design DAG task graph schema and executor
-- [ ] Implement virtual workspace (isolated sandbox for code simulation and test execution)
-- [ ] Write configuration schema (YAML): model API keys, capability profiles, consensus thresholds, cost limits
+- [x] Design DAG task graph schema and executor
+- [x] Implement virtual workspace (isolated sandbox for code simulation and test execution)
+- [x] Write configuration schema (YAML): model API keys, capability profiles, consensus thresholds, cost limits
 
 ---
 

@@ -84,10 +84,11 @@ func (e *Executor) Start(ctx context.Context, task string, workspace string) tea
 		// 3. Select Model
 		client, err := e.selector.SelectByRole("Executor")
 		if err != nil {
-			e.log("WARN", "No specialized model for Executor, using fallback.")
-		} else {
-			e.log("INFO", fmt.Sprintf("Using model: %s (%s)", client.Name(), client.Provider()))
+			e.log("ERROR", fmt.Sprintf("No model found for Executor: %v", err))
+			e.emitStatus(agent.StatusFailed)
+			return
 		}
+		e.log("INFO", fmt.Sprintf("Using model: %s (%s)", client.Name(), client.Provider()))
 
 		// 4. Call LLM
 		e.log("INFO", "Generating code in sandbox...")
@@ -115,7 +116,6 @@ func (e *Executor) Start(ctx context.Context, task string, workspace string) tea
 		}
 
 		e.bb.Set(consensus.KeyExecutorCode, resp.Content)
-		e.bb.Set(consensus.KeySemanticAgreement, 0.9) // Self-assessment
 
 		e.log("INFO", "✅ Implementation phase complete.")
 		e.emitStatus(agent.StatusDone)
