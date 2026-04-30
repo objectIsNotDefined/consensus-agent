@@ -38,6 +38,8 @@ func (r *Registry) GetByRole(role Role) Agent {
 
 // StartAll starts every agent concurrently and returns their initial commands
 // to be batched together by the TUI runtime.
+//
+// Deprecated: prefer StartRole for DAG-driven orchestration.
 func (r *Registry) StartAll(ctx context.Context, task, workspace string) []tea.Cmd {
 	cmds := make([]tea.Cmd, 0, len(r.agents))
 	for _, a := range r.agents {
@@ -46,10 +48,30 @@ func (r *Registry) StartAll(ctx context.Context, task, workspace string) []tea.C
 	return cmds
 }
 
+// StartRole starts the agent for a single role and returns its initial tea.Cmd.
+// Returns nil if no agent is registered for the given role.
+func (r *Registry) StartRole(ctx context.Context, role Role, task, workspace string) tea.Cmd {
+	a := r.byRole[role]
+	if a == nil {
+		return nil
+	}
+	return a.Start(ctx, task, workspace)
+}
+
 // ResetAll resets every agent to its initial idle state.
 func (r *Registry) ResetAll() {
 	for _, a := range r.agents {
 		a.Reset()
+	}
+}
+
+// ResetRoles resets only the agents for the specified roles.
+// Used by the Debate Loop to re-run only Executor and Validator.
+func (r *Registry) ResetRoles(roles []Role) {
+	for _, role := range roles {
+		if a := r.byRole[role]; a != nil {
+			a.Reset()
+		}
 	}
 }
 

@@ -9,9 +9,11 @@ import (
 	"github.com/google/uuid"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/objectisnotdefined/consensus-agent/ca/internal/agent"
-	"github.com/objectisnotdefined/consensus-agent/ca/internal/agent/mock"
 	"github.com/objectisnotdefined/consensus-agent/ca/internal/agent/roles"
 	"github.com/objectisnotdefined/consensus-agent/ca/internal/blackboard"
+	"github.com/objectisnotdefined/consensus-agent/ca/internal/consensus"
+	"github.com/objectisnotdefined/consensus-agent/ca/internal/dag"
+	"github.com/objectisnotdefined/consensus-agent/ca/internal/sandbox"
 	"github.com/objectisnotdefined/consensus-agent/ca/internal/tui"
 	"github.com/objectisnotdefined/consensus-agent/ca/pkg/config"
 	"github.com/objectisnotdefined/consensus-agent/ca/pkg/llm"
@@ -67,15 +69,34 @@ Powered by MCDD — Model Consensus Driven Development.`,
 		// Initialize LLM selector
 		selector := llm.NewSelector(cfg.Models)
 
+		// Initialize Sandbox
+		sbManager := sandbox.NewManager()
+		sbPath, cleanup, err := sbManager.Prepare(abs)
+		if err != nil {
+			return fmt.Errorf("failed to prepare sandbox: %w", err)
+		}
+		defer cleanup()
+		bb.Set(consensus.KeySandboxPath, sbPath)
+
 		registry := agent.NewRegistry([]agent.Agent{
 			roles.NewNavigator(bb, selector),
-			mock.NewArchitect(bb),
-			mock.NewExecutor(bb),
-			mock.NewValidator(bb),
+			roles.NewArchitect(bb, selector),
+			roles.NewExecutor(bb, selector),
+			roles.NewValidator(bb, selector),
 		})
 
+		// Build the MCDD execution pipeline (DAG)
+		pipeline, err := dag.MCDDPipeline()
+		if err != nil {
+			return fmt.Errorf("failed to build dag pipeline: %w", err)
+		}
+		dagExec := dag.NewExecutor(pipeline)
+
+		// Initialize Consensus Evaluator
+		evaluator := consensus.NewEvaluator(bb, cfg.Consensus.Threshold, cfg.Consensus.MaxRounds)
+
 		// Launch TUI
-		model := tui.New(registry, abs, cfg, bb, sessionID)
+		model := tui.New(registry, dagExec, evaluator, abs, cfg, bb, sessionID)
 		p := tea.NewProgram(model,
 			tea.WithAltScreen(),
 			tea.WithMouseCellMotion(),

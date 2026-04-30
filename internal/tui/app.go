@@ -29,6 +29,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/objectisnotdefined/consensus-agent/ca/internal/agent"
 	"github.com/objectisnotdefined/consensus-agent/ca/internal/blackboard"
+	"github.com/objectisnotdefined/consensus-agent/ca/internal/consensus"
+	"github.com/objectisnotdefined/consensus-agent/ca/internal/dag"
 	"github.com/objectisnotdefined/consensus-agent/ca/internal/tui/styles"
 	"github.com/objectisnotdefined/consensus-agent/ca/pkg/config"
 )
@@ -49,6 +51,8 @@ func scheduleTick() tea.Cmd {
 type Model struct {
 	// ── Dependencies
 	registry  *agent.Registry
+	dagExec   *dag.Executor
+	evaluator *consensus.Evaluator
 	workspace string
 	cfg       *config.Config
 	bb        blackboard.Blackboard
@@ -59,9 +63,14 @@ type Model struct {
 	height int
 
 	// ── Application state
-	inputMode bool // true → initial task input screen
+	inputMode    bool // true → initial task input screen
 	followUpMode bool // true → show input box at the bottom of the dashboard
-	allDone   bool // true when every agent reports Done or Failed
+	allDone      bool // true when consensus is reached or escalated
+	escalated    bool // true when max debate rounds exhausted without consensus
+	debateRound  int  // current debate round (0 = not yet evaluated)
+
+	// ── Current task (stored so follow-up rounds can re-use DAG)
+	task string
 
 	// ── Task input
 	input textinput.Model
@@ -91,7 +100,7 @@ type Model struct {
 }
 
 // New creates the root model. Call tea.NewProgram(model, tea.WithAltScreen()) to run.
-func New(registry *agent.Registry, workspace string, cfg *config.Config, bb blackboard.Blackboard, sessionID string) *Model {
+func New(registry *agent.Registry, dagExec *dag.Executor, evaluator *consensus.Evaluator, workspace string, cfg *config.Config, bb blackboard.Blackboard, sessionID string) *Model {
 	ti := textinput.New()
 	ti.Placeholder = "e.g. Add JWT auth middleware to the HTTP router"
 	ti.Focus()
@@ -108,6 +117,8 @@ func New(registry *agent.Registry, workspace string, cfg *config.Config, bb blac
 
 	return &Model{
 		registry:   registry,
+		dagExec:    dagExec,
+		evaluator:  evaluator,
 		workspace:  workspace,
 		cfg:        cfg,
 		bb:         bb,
@@ -165,9 +176,43 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agent.StatusMsg:
 		m.statuses[msg.Role] = msg.Status
 		if msg.Status == agent.StatusDone || msg.Status == agent.StatusFailed {
-			m.recalcConsensus()
+			if msg.Status == agent.StatusDone {
+				// Ask the DAG executor which agents are now unblocked
+				nextRoles := m.dagExec.MarkDone(msg.Role)
+				for _, role := range nextRoles {
+					if cmd := m.registry.StartRole(m.ctx, role, m.task, m.workspace); cmd != nil {
+						cmds = append(cmds, cmd)
+					}
+				}
+			}
 			if m.registry.AllDone() {
-				m.allDone = true
+				// All agents done — run the real consensus evaluation
+				report := m.evaluator.Evaluate()
+				m.consensusScore = report.FinalScore
+				m.debateRound = report.Round
+
+				if report.Passed {
+					// ✅ Consensus reached
+					m.allDone = true
+				} else if m.evaluator.ShouldEscalate(report) {
+					// 🚨 Max rounds exhausted — escalate to Human-in-the-Loop
+					m.allDone = true
+					m.escalated = true
+				} else {
+					// 🔄 Debate round: reset Executor + Validator and re-run
+					debateRoles := []agent.Role{agent.RoleExecutor, agent.RoleValidator}
+					m.registry.ResetRoles(debateRoles)
+					m.dagExec.ResetRoles(debateRoles)
+					for _, r := range debateRoles {
+						m.statuses[r] = agent.StatusIdle
+						m.logs[r] = nil
+					}
+					for _, role := range m.dagExec.Ready() {
+						if cmd := m.registry.StartRole(m.ctx, role, m.task, m.workspace); cmd != nil {
+							cmds = append(cmds, cmd)
+						}
+					}
+				}
 			}
 		}
 
@@ -223,13 +268,20 @@ func (m *Model) handleInputKey(msg tea.KeyMsg) []tea.Cmd {
 			return nil
 		}
 		// Switch to run mode
+		m.task = task
 		m.inputMode = false
 		m.input.Blur()
 		m.startTime = time.Now()
 		m.rebuildViewport()
-		// Fire all agents in parallel
 		_, _ = m.bb.CreateTurn(m.sessionID, task, m.turns)
-		return m.registry.StartAll(m.ctx, task, m.workspace)
+		// Start only root nodes (Navigator) — DAG will unlock the rest
+		var cmds []tea.Cmd
+		for _, role := range m.dagExec.Ready() {
+			if cmd := m.registry.StartRole(m.ctx, role, task, m.workspace); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		return cmds
 
 	case tea.KeyCtrlC, tea.KeyEsc:
 		m.cancel()
@@ -246,6 +298,7 @@ func (m *Model) handleRunKey(msg tea.KeyMsg) []tea.Cmd {
 			if task == "" {
 				return nil
 			}
+			m.task = task
 			m.followUpMode = false
 			m.turns++
 			m.allDone = false
@@ -257,16 +310,24 @@ func (m *Model) handleRunKey(msg tea.KeyMsg) []tea.Cmd {
 				m.logs[r] = nil
 			}
 			m.registry.ResetAll()
+			m.dagExec.Reset()
 			m.input.Blur()
 			m.rebuildViewport()
 			_, _ = m.bb.CreateTurn(m.sessionID, task, m.turns)
-			return m.registry.StartAll(m.ctx, task, m.workspace)
+			// Start only root nodes — DAG drives the rest
+			var cmds []tea.Cmd
+			for _, role := range m.dagExec.Ready() {
+				if cmd := m.registry.StartRole(m.ctx, role, task, m.workspace); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
+			}
+			return cmds
 		case tea.KeyEsc:
 			m.followUpMode = false
 			m.input.Blur()
 			return nil
 		}
-		// In follow-up mode, we only handle Enter and Esc. 
+		// In follow-up mode, we only handle Enter and Esc.
 		// Other keys are passed to the textinput component in the main Update loop.
 		return nil
 	}
@@ -338,25 +399,16 @@ func (m *Model) syncViewport() {
 	m.viewport.GotoBottom()
 }
 
-// recalcConsensus updates the simulated consensus score based on done count.
-func (m *Model) recalcConsensus() {
-	done := 0
-	for _, s := range m.statuses {
-		if s == agent.StatusDone {
-			done++
-		}
-	}
-	// Simulates a score that climbs toward 0.91 as agents complete
-	m.consensusScore = float64(done) / float64(len(agent.AllRoles)) * 0.91
-}
-
-// recalcConsensus updates the simulated consensus score based on done count.
 // resetSession resets the TUI and all agents for a new task.
 func (m *Model) resetSession() {
 	m.turns = 0
 	m.registry.ResetAll()
+	m.dagExec.Reset()
+	m.evaluator.Reset()
 	m.inputMode = true
 	m.allDone = false
+	m.escalated = false
+	m.debateRound = 0
 	m.tokenUsed = 0
 	m.consensusScore = 0
 	m.elapsed = 0
@@ -429,7 +481,7 @@ func (m *Model) renderRunScreen() string {
 			Padding(0, 1).
 			Render(lipgloss.JoinHorizontal(lipgloss.Center, prompt, m.input.View()))
 	} else if m.allDone {
-		footer = renderConsensusBanner(m.width, m.consensusScore, m.elapsed)
+		footer = renderConsensusBanner(m.width, m.consensusScore, m.elapsed, m.debateRound, m.escalated)
 	} else {
 		footer = renderFooter(m.width, false)
 	}
@@ -460,18 +512,27 @@ func (m *Model) renderRunScreen() string {
 	return lipgloss.JoinVertical(lipgloss.Left, header, panels, footer)
 }
 
-// renderConsensusBanner renders the success banner shown when all agents finish.
-func renderConsensusBanner(width int, score float64, elapsed time.Duration) string {
-	msg := styles.DoneStyle.Bold(true).Render("✅  Consensus Reached") +
-		styles.Muted.Render(
-			"  ·  Score: "+lipgloss.NewStyle().Foreground(lipgloss.Color(styles.ColSuccess)).
-				Render(formatScore(score))+
-				"  ·  Time: "+formatDuration(elapsed)+
-				"  ·  [Enter] Next turn  [R] Reset  [Q] Quit",
-		)
+// renderConsensusBanner renders the banner shown when evaluation completes.
+// It adapts based on whether consensus was reached, escalated, or pending debate.
+func renderConsensusBanner(width int, score float64, elapsed time.Duration, debateRound int, escalated bool) string {
+	scoreFmt := lipgloss.NewStyle().Foreground(lipgloss.Color(styles.ColSuccess)).Render(formatScore(score))
+	roundFmt := fmt.Sprintf("Round %d", debateRound)
+
+	var title, detail, bg string
+	if escalated {
+		title = styles.AppName.Bold(true).Foreground(lipgloss.Color(styles.ColWarning)).Render("⚠  Escalated to Human Review")
+		detail = "  ·  Score: " + scoreFmt + "  ·  " + roundFmt + "  ·  [Enter] Provide guidance  [R] Reset  [Q] Quit"
+		bg = "#2D1A00"
+	} else {
+		title = styles.DoneStyle.Bold(true).Render("✅  Consensus Reached")
+		detail = "  ·  Score: " + scoreFmt + "  ·  Time: " + formatDuration(elapsed) + "  ·  " + roundFmt + "  ·  [Enter] Next turn  [R] Reset  [Q] Quit"
+		bg = "#0D2818"
+	}
+
+	msg := title + styles.Muted.Render(detail)
 	return lipgloss.NewStyle().
 		Width(width).
-		Background(lipgloss.Color("#0D2818")).
+		Background(lipgloss.Color(bg)).
 		Padding(0, 2).
 		Render(msg)
 }

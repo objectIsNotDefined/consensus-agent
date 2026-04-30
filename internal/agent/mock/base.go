@@ -30,6 +30,9 @@ type base struct {
 	status agent.Status
 	plans  []logPlan
 	cursor int
+	// onDone is called once when all plans are exhausted, just before StatusDone
+	// is emitted. Use it to write final signals to the Blackboard.
+	onDone func()
 }
 
 // ── agent.Agent interface ────────────────────────────────────────────────────
@@ -59,6 +62,11 @@ func (b *base) Start(_ context.Context, _, _ string) tea.Cmd {
 // When all plans are exhausted it emits a StatusDone message.
 func (b *base) Next() tea.Cmd {
 	if b.cursor >= len(b.plans) {
+		// Fire onDone hook once before transitioning to StatusDone
+		if b.onDone != nil {
+			b.onDone()
+			b.onDone = nil // prevent double-call on Reset/re-use
+		}
 		b.status = agent.StatusDone
 		return func() tea.Msg {
 			return agent.StatusMsg{Role: b.role, Status: agent.StatusDone}

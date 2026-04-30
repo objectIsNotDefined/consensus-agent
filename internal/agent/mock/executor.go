@@ -5,6 +5,7 @@ import (
 
 	"github.com/objectisnotdefined/consensus-agent/ca/internal/agent"
 	"github.com/objectisnotdefined/consensus-agent/ca/internal/blackboard"
+	"github.com/objectisnotdefined/consensus-agent/ca/internal/consensus"
 )
 
 // Executor simulates the Executor role: implementing code logic for subtasks
@@ -31,8 +32,23 @@ func NewExecutor(bb blackboard.Blackboard) agent.Agent {
 		{300 * time.Millisecond, "INFO", "Output confidence self-assessment: 0.88"},
 		{200 * time.Millisecond, "INFO", "✅ Executor complete. All subtasks submitted."},
 	}
-	return &Executor{
+	e := &Executor{
 		base: base{role: agent.RoleExecutor, plans: plans},
 		bb:   bb,
 	}
+	// onDone writes quality signals to the Blackboard.
+	// Plan A: Round 1 semantic score is intentionally below threshold (0.72)
+	// to trigger a Debate round. Round 2 (debate mode) writes a high score.
+	e.base.onDone = func() {
+		bb.Set(consensus.KeyExecutorCode, "// generated code — 142 lines")
+		_, isDebate := bb.Get(consensus.KeyDebateCritique)
+		if isDebate {
+			// Revised output after Architect critique
+			bb.Set(consensus.KeySemanticAgreement, 0.94)
+		} else {
+			// Initial output — low semantic alignment, will trigger debate
+			bb.Set(consensus.KeySemanticAgreement, 0.72)
+		}
+	}
+	return e
 }
